@@ -1,26 +1,40 @@
-import React, { useEffect } from 'react'
+import React, {} from 'react'
 import './App.css';
-import { io } from "socket.io-client";
 import { Row, Col, InputNumber, Card, Button, Space, Timeline } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
-const socket = io("http://10.161.214.175:8123");
+const ROSLIB = require("roslib");
 
-
-function arrayBufferToBase64(buffer) {
-  let binary = '';
-  let bytes = new Uint8Array(buffer);
-  let len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
-}
 
 class DetectionViewer extends React.Component {
   constructor(props) {
     super(props);
     this.canvasRef = React.createRef();
+    this.drawCanvas = this.drawCanvas.bind(this);
+  }
+
+  drawCanvas(canvas) {
+    let image = this.image;
+    const w = canvas.clientWidth;
+    const h = image.height / image.width * canvas.clientWidth;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+    ctx.drawImage(image, 0, 0, w, h);
+    let msg = this.msg;
+    for (let i = 0; i < msg.pixel_pts_lt.length; ++i) {
+      ctx.beginPath();
+      ctx.moveTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
+      ctx.lineTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_rb[i].y / 1080 * h);
+      ctx.lineTo(msg.pixel_pts_rb[i].x / 1920 * w, msg.pixel_pts_rb[i].y / 1080 * h);
+      ctx.lineTo(msg.pixel_pts_rb[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
+      ctx.lineTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
+      ctx.strokeStyle = "#F5270B";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
   }
 
   componentDidMount() {
@@ -28,25 +42,37 @@ class DetectionViewer extends React.Component {
     that.canvasRef.current.addEventListener("mousedown", (e) => {
       console.log(e);
     })
-    socket.on("detection_image", (data) => {
-      console.log("receive detection_image")
+    window.addEventListener('resize', () => {
       const c = that.canvasRef.current;
-      if (c != null) {
-        const ctx = c.getContext('2d');
-        const image = new Image();
-        image.onload = function () {
-          console.log(c.width)
-          console.log(ctx.canvas.clientWidth)
-          console.log(image.height / image.width * ctx.canvas.clientWidth)
-          const w = ctx.canvas.clientWidth;
-          const h = image.height / image.width * ctx.canvas.clientWidth;
-          c.width = w;
-          c.height = h;
-          ctx.drawImage(image, 0, 0, w, h);
+      if (that.image && c) {
+        that.drawCanvas(c);
+      }
+    })
+
+    this.listener = new ROSLIB.Topic({
+      ros: ros,
+      name: '/picking_detection_result',
+      messageType: 'pickingv2/DetectionResult'
+    });
+    this.listener.subscribe(function (msg) {
+      console.log('Received message on ' + that.listener.name);
+      console.log(msg)
+      const c = that.canvasRef.current;
+      if (c) {
+        that.image = new Image();
+        that.msg = msg
+        that.image.onload = function () {
+          that.drawCanvas(c)
         };
-        image.src = `data:image/png;base64,${arrayBufferToBase64(data.data)}`;
+        that.image.src = `data:image/${msg.image.format};base64,${msg.image.data}`;
       }
     });
+  }
+
+  componentWillUnmount() {
+    if (this.listener != null) {
+      this.listener.unsubscribe();
+    }
   }
 
   render() {
@@ -63,70 +89,188 @@ class ControlPanel extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      isGoHomeLoading: false
+      loadingBtName: "",
+      isStopBtLoading: false,
+      isPauseBtLoading: false,
+      isCarMoveBtLoadingName: "",
     };
-    this.onGoHomeClicked = this.onGoHomeClicked.bind(this);
+    this.onCmdBtClicked = this.onCmdBtClicked.bind(this);
+    this.onStopBtClicked = this.onStopBtClicked.bind(this);
+    this.onPauseBtClicked = this.onPauseBtClicked.bind(this);
+    this.onCarMoveBtClicked = this.onCarMoveBtClicked.bind(this);
+    this.carMoveDistance = 1.0;
   }
 
-  onGoHomeClicked() {
-    console.log("onGoHomeClicked");
-    let that = this;
-    if (socket.connected) {
-      socket.emit("cmd", {
-        name: "go_home"
-      }, (data) => {
-        that.setState({
-          isGoHomeLoading: false
-        });
-      });
-      this.setState({
-        isGoHomeLoading: true
-      });
-    }
+  componentDidMount() {
+    this.ac = new ROSLIB.ActionClient({
+      ros: ros,
+      serverName: '/picking_cmd',
+      actionName: 'pickingv2/PickingCmdAction'
+    });
+    this.controlSrv = new ROSLIB.Service({
+      ros: ros,
+      name: '/picking_control',
+      serviceType: 'pickingv2/PickingControl'
+    });
+    this.carMoveSrv = new ROSLIB.Service({
+      ros: ros,
+      name: '/picking_car_move',
+      serviceType: 'pickingv2/CarMove'
+    })
   }
 
-  onStopClicked() {
-    console.log("onStopClicked");
+  onCmdBtClicked(cmd_name) {
+    console.log("onCmdBtClicked");
+    this.setState({
+      loadingBtName: cmd_name,
+      isTaskRunning: true
+    })
     let that = this;
-    if (socket.connected) {
-      socket.emit("cmd", {
-        name: "stop"
-      }, (data) => {
-      });
-    }
+    const goal = new ROSLIB.Goal({
+      actionClient: this.ac,
+      goalMessage: {
+        name: cmd_name,
+      }
+    });
+    goal.on('feedback', function (feedback) {
+      console.log('Feedback: ' + feedback.name);
+    });
+
+    goal.on('result', function (result) {
+      console.log('Final Result: ');
+      console.log(result)
+      that.setState({
+        loadingBtName: "",
+      })
+    });
+    goal.send();
+  }
+
+  onStopBtClicked() {
+    console.log("onStopBtClicked");
+    let req = new ROSLIB.ServiceRequest({
+      cmd: "stop",
+    });
+    let that = this;
+    this.controlSrv.callService(req, function (result) {
+      console.log(result);
+      that.setState({
+        isStopBtLoading: false
+      })
+    });
+    this.setState({
+      isStopBtLoading: true
+    })
+  }
+
+  onPauseBtClicked() {
+    console.log("onPauseBtClicked");
+    let req = new ROSLIB.ServiceRequest({
+      cmd: "pause",
+    });
+    let that = this;
+    this.controlSrv.callService(req, function (result) {
+      console.log(result);
+      that.setState({
+        isPauseBtLoading: false
+      })
+    });
+    this.setState({
+      isPauseBtLoading: true
+    })
+  }
+
+  onCarMoveBtClicked(cmd) {
+    console.log("onCarMoveBtClicked");
+    let req = new ROSLIB.ServiceRequest({
+      cmd: cmd,
+      distance: this.carMoveDistance,
+    });
+    let that = this;
+    this.carMoveSrv.callService(req, function (result) {
+      console.log(result);
+      that.setState({
+        isCarMoveBtLoadingName: ""
+      })
+    });
+    this.setState({
+      isCarMoveBtLoadingName: cmd
+    })
+  }
+
+  componentWillUnmount() {
+    // this.goal.cancel();
+    // this.ac.dispose();
   }
 
   render() {
     return (
       <Card title="控制面板" style={{width: '100%'}} size="small">
         <Space direction="vertical" size="middle">
-          <Row gutter={8} justify="space-between" style={{width: 190}}>
-            <Col span={12}>
-              <Button block onClick={this.onGoHomeClicked} loading={this.state.isGoHomeLoading}>归位</Button>
+          <Row gutter={8} justify="space-between" style={{width: 200}}>
+            <Col span={14}>
+              <Button block
+                      onClick={() => this.onCmdBtClicked("go_home")}
+                      loading={this.state.loadingBtName === "go_home"}
+                      disabled={this.state.loadingBtName !== "" && this.state.loadingBtName !== "go_home"}
+              >归位</Button>
             </Col>
-            <Col span={12}>
-              <Button block danger type="primary" onClick={this.onStopClicked}>停止</Button>
+            <Col span={10}>
+              <Button block
+                      danger
+                      type="primary"
+                      onClick={this.onStopBtClicked}
+                      loading={this.state.isStopBtLoading}
+              >停止</Button>
             </Col>
           </Row>
           <Row gutter={8} justify="space-between">
-            <Col span={12}>
-              <Button block>自动运行</Button>
+            <Col span={14}>
+              <Button block
+                      onClick={() => this.onCmdBtClicked("auto")}
+                      loading={this.state.loadingBtName === "auto"}
+                      disabled={this.state.loadingBtName !== "" && this.state.loadingBtName !== "auto"}
+              >自动运行</Button>
             </Col>
-            <Col span={12}>
-              <Button block type="primary">暂停</Button>
+            <Col span={10}>
+              <Button block
+                      type="primary"
+                      onClick={this.onPauseBtClicked}
+                      loading={this.state.isPauseBtLoading}
+              >暂停</Button>
             </Col>
           </Row>
           <Row gutter={8} justify="space-between">
             <Col span={8}>
-              <Button block icon={<ArrowUpOutlined/>}/>
+              <Button block icon={<ArrowUpOutlined/>}
+                      onClick={() => this.onCarMoveBtClicked("forward")}
+                      loading={this.state.isCarMoveBtLoadingName === "forward"}
+                      disabled={this.state.isCarMoveBtLoadingName !== "" && this.state.isCarMoveBtLoadingName !== "forward"}
+
+              />
             </Col>
             <Col span={8}>
-              <InputNumber min={0} max={10} defaultValue={3.0} step={1.0} style={{width: 60}}/>
+              <InputNumber min={0} max={10} defaultValue={1.0} step={1.0} style={{width: 60}}
+                           onChange={(e) => {
+                             this.carMoveDistance = e
+                           }}
+              />
             </Col>
             <Col span={8}>
-              <Button block icon={<ArrowDownOutlined/>}/>
+              <Button block icon={<ArrowDownOutlined/>}
+                      onClick={() => this.onCarMoveBtClicked("backward")}
+                      loading={this.state.isCarMoveBtLoadingName === "backward"}
+                      disabled={this.state.isCarMoveBtLoadingName !== "" && this.state.isCarMoveBtLoadingName !== "backward"}
+              />
             </Col>
           </Row>
+          {/*<Row>*/}
+          {/*  <Button block*/}
+          {/*          danger*/}
+          {/*          type="primary"*/}
+          {/*          onClick={() => this.onCarMoveBtClicked("stop")}*/}
+          {/*  >停止移动</Button>*/}
+          {/*</Row>*/}
         </Space>
       </Card>
     );
@@ -147,18 +291,18 @@ class TaskStatusPanel extends React.Component {
   }
 
   componentDidMount() {
-    const that = this;
-    socket.on("task-status", (data) => {
-      console.log("receive task-status");
-      console.log(data);
-      that.setState({
-        processName: data.processName,
-        processStatus: data.processStatus,
-        taskInfo: data.taskInfo,
-        processId: data.processId,
-        msg: data.msg,
-      })
-    });
+    // const that = this;
+    // socket.on("task-status", (data) => {
+    //   console.log("receive task-status");
+    //   console.log(data);
+    //   that.setState({
+    //     processName: data.processName,
+    //     processStatus: data.processStatus,
+    //     taskInfo: data.taskInfo,
+    //     processId: data.processId,
+    //     msg: data.msg,
+    //   })
+    // });
   }
 
   render() {
@@ -197,36 +341,51 @@ class TaskStatusPanel extends React.Component {
   }
 }
 
-function App() {
-  useEffect(() => {
-    console.log('App effect')
-    socket.on("connect", () => {
-      console.log("connect");
-      console.log(socket.id)
+const ros = new ROSLIB.Ros()
+
+class App extends React.Component {
+
+  // constructor(props) {
+  //   super(props);
+  // }
+
+  componentDidMount() {
+    ros.connect("ws://0.0.0.0:9090");
+    ros.on('connection', function () {
+      console.log('Connected to websocket server.');
     });
 
-    socket.on("disconnect", () => {
-      console.log("disconnect");
-      console.log(socket.id)
+    ros.on('error', function (error) {
+      console.log('Error connecting to websocket server: ', error);
     });
-  }, []);
 
-  return (
-    <div className="App">
-      <Row style={{height: '100%'}} gutter={8}>
-        <Col flex="auto" style={{display: 'flex', flexDirection: 'column'}}>
-          <div  style={{height: 120, backgroundColor: 'white'}}>URDF viewer</div>
-          <div style={{height: 8}}/>
-          <DetectionViewer/>
-        </Col>
-        <Col flex="200px" style={{display: 'flex', flexDirection: 'column'}}>
-          <ControlPanel/>
-          <div style={{height: 8}}/>
-          <TaskStatusPanel/>
-        </Col>
-      </Row>
-    </div>
-  );
+    ros.on('close', function () {
+      console.log('Connection to websocket server closed.');
+    });
+  }
+
+  componentWillUnmount() {
+    ros.close();
+  }
+
+  render() {
+    return (
+      <div className="App">
+        <Row style={{height: '100%'}} gutter={8} wrap={false}>
+          <Col flex="auto" style={{display: 'flex', flexDirection: 'column'}}>
+            <div style={{height: 120, backgroundColor: 'white'}}>URDF viewer</div>
+            <div style={{height: 8}}/>
+            <DetectionViewer/>
+          </Col>
+          <Col flex="200px" style={{display: 'flex', flexDirection: 'column'}}>
+            <ControlPanel/>
+            <div style={{height: 8}}/>
+            <TaskStatusPanel/>
+          </Col>
+        </Row>
+      </div>
+    );
+  }
 }
 
 export default App;
