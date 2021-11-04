@@ -3,87 +3,199 @@ import './App.css';
 import { Row, Col, InputNumber, Card, Button, Space, Timeline } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
+const zrender = require("zrender");
 const ROSLIB = require("roslib");
 
 
-class DetectionViewer extends React.Component {
+// class DetectionViewer extends React.Component {
+//   constructor(props) {
+//     super(props);
+//     this.canvasRef = React.createRef();
+//     this.drawCanvas = this.drawCanvas.bind(this);
+//   }
+//
+//   drawCanvas(canvas) {
+//     let image = this.image;
+//     const w = canvas.clientWidth;
+//     const h = image.height / image.width * canvas.clientWidth;
+//     canvas.width = w;
+//     canvas.height = h;
+//     const ctx = canvas.getContext('2d');
+//     ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+//
+//     ctx.drawImage(image, 0, 0, w, h);
+//     let msg = this.msg;
+//     for (let i = 0; i < msg.pixel_pts_lt.length; ++i) {
+//       ctx.beginPath();
+//       ctx.moveTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
+//       ctx.lineTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_rb[i].y / 1080 * h);
+//       ctx.lineTo(msg.pixel_pts_rb[i].x / 1920 * w, msg.pixel_pts_rb[i].y / 1080 * h);
+//       ctx.lineTo(msg.pixel_pts_rb[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
+//       ctx.lineTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
+//       ctx.strokeStyle = "#F5270B";
+//       ctx.lineWidth = 3;
+//       ctx.stroke();
+//     }
+//   }
+//
+//   componentDidMount() {
+//     let that = this;
+//     that.canvasRef.current.addEventListener("mousedown", (e) => {
+//       console.log(e);
+//     })
+//     window.addEventListener('resize', () => {
+//       const c = that.canvasRef.current;
+//       if (that.image && c) {
+//         that.drawCanvas(c);
+//       }
+//     })
+//
+//     this.listener = new ROSLIB.Topic({
+//       ros: ros,
+//       name: '/picking_detection_result',
+//       messageType: 'pickingv2/DetectionResult'
+//     });
+//     this.listener.subscribe(function (msg) {
+//       console.log('Received message on ' + that.listener.name);
+//       console.log(msg)
+//       const c = that.canvasRef.current;
+//       if (c) {
+//         that.image = new Image();
+//         that.msg = msg
+//         that.image.onload = function () {
+//           that.drawCanvas(c)
+//         };
+//         that.image.src = `data:image/${msg.image.format};base64,${msg.image.data}`;
+//       }
+//     });
+//   }
+//
+//   componentWillUnmount() {
+//     if (this.listener != null) {
+//       this.listener.unsubscribe();
+//     }
+//   }
+//
+//   render() {
+//     return (
+//       <div className="DetectionViewer">
+//         <canvas ref={this.canvasRef} style={{width: '100%'}}> Your browser cannot support canvas.</canvas>
+//       </div>
+//     );
+//   }
+// }
+
+class DetectionPanel extends React.Component {
   constructor(props) {
     super(props);
-    this.canvasRef = React.createRef();
-    this.drawCanvas = this.drawCanvas.bind(this);
+    this.r = React.createRef();
+    this.pr = React.createRef();
   }
 
-  drawCanvas(canvas) {
-    let image = this.image;
-    const w = canvas.clientWidth;
-    const h = image.height / image.width * canvas.clientWidth;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+  draw(msg, w, h) {
 
-    ctx.drawImage(image, 0, 0, w, h);
-    let msg = this.msg;
-    for (let i = 0; i < msg.pixel_pts_lt.length; ++i) {
-      ctx.beginPath();
-      ctx.moveTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
-      ctx.lineTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_rb[i].y / 1080 * h);
-      ctx.lineTo(msg.pixel_pts_rb[i].x / 1920 * w, msg.pixel_pts_rb[i].y / 1080 * h);
-      ctx.lineTo(msg.pixel_pts_rb[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
-      ctx.lineTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
-      ctx.strokeStyle = "#F5270B";
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    }
   }
 
   componentDidMount() {
-    let that = this;
-    that.canvasRef.current.addEventListener("mousedown", (e) => {
-      console.log(e);
-    })
-    window.addEventListener('resize', () => {
-      const c = that.canvasRef.current;
-      if (that.image && c) {
-        that.drawCanvas(c);
+    this.zr = zrender.init(this.r.current, {
+      width: 'auto',
+      height: 'auto'
+    });
+    let circle = new zrender.Circle({
+      shape: {
+        cx: 150,
+        cy: 50,
+        r: 40
+      },
+      style: {
+        fill: 'none',
+        stroke: '#F00'
       }
-    })
+    });
+    circle.on("click", () => console.log("sds"))
+    this.zr.add(circle);
 
+    let that = this;
     this.listener = new ROSLIB.Topic({
       ros: ros,
       name: '/picking_detection_result',
       messageType: 'pickingv2/DetectionResult'
     });
+
+    this.g = new zrender.Group();
+    this.zr.add(this.g);
     this.listener.subscribe(function (msg) {
       console.log('Received message on ' + that.listener.name);
-      console.log(msg)
-      const c = that.canvasRef.current;
-      if (c) {
-        that.image = new Image();
-        that.msg = msg
-        that.image.onload = function () {
-          that.drawCanvas(c)
-        };
-        that.image.src = `data:image/${msg.image.format};base64,${msg.image.data}`;
+      const w = that.pr.current.clientWidth;
+      const h = 1080 / 1920 * that.zr.getWidth();
+      that.r.current.style.height = Math.round(h).toString() + 'px';
+      that.r.current.style.width = w.toString() + 'px';
+      that.zr.resize();
+      let img = new zrender.Image({
+        style: {
+          image: `data:image/${msg.image.format};base64,${msg.image.data}`,
+          x: 0,
+          y: 0,
+          width: w,
+          height: h
+        }
+      });
+      that.g.removeAll();
+      that.g.add(img);
+      for (let i = 0; i < msg.pixel_pts_lt.length; ++i) {
+        let rc = new zrender.Rect({
+          shape: {
+            x: msg.pixel_pts_lt[i].x / 1920 * w,
+            y: msg.pixel_pts_lt[i].y / 1080 * h,
+            width: (msg.pixel_pts_rb[i].x - msg.pixel_pts_lt[i].x) / 1920 * w,
+            height: (msg.pixel_pts_rb[i].y - msg.pixel_pts_lt[i].y) / 1080 * h,
+            r: [3, 3, 3, 3]
+          },
+          style: {
+            fill: 'none',
+            stroke: '#F00'
+          }
+        });
+        that.g.add(rc);
       }
+      console.log(that.g.childCount());
     });
-  }
-
-  componentWillUnmount() {
-    if (this.listener != null) {
-      this.listener.unsubscribe();
-    }
+    window.addEventListener('resize', () => {
+      const w = that.pr.current.clientWidth;
+      const h = 1080 / 1920 * that.zr.getWidth();
+      const scale = w / that.zr.getWidth();
+      that.r.current.style.height = Math.round(h).toString() + 'px';
+      that.r.current.style.width = w.toString() + 'px';
+      that.g.eachChild(function (ch) {
+        if (ch.shape) {
+          ch.attr("shape", {
+            x: scale * ch.shape.x,
+            y: scale * ch.shape.y,
+            width: scale * ch.shape.width,
+            height: scale * ch.shape.height,
+          })
+        } else {
+          ch.attr("style", {
+            x: scale * ch.style.x,
+            y: scale * ch.style.y,
+            width: scale * ch.style.width,
+            height: scale * ch.style.height,
+          })
+        }
+      })
+      that.zr.resize();
+    })
   }
 
   render() {
     return (
-      <div className="DetectionViewer">
-        <canvas ref={this.canvasRef} style={{width: '100%'}}> Your browser cannot support canvas.</canvas>
+      <div className="DetectionViewer" ref={this.pr}>
+        <div ref={this.r} />
+        next
       </div>
     );
   }
 }
-
 
 class ControlPanel extends React.Component {
   constructor(props) {
@@ -350,7 +462,7 @@ class App extends React.Component {
   // }
 
   componentDidMount() {
-    ros.connect("ws://0.0.0.0:9090");
+    ros.connect("ws://10.161.237.102:9090");
     ros.on('connection', function () {
       console.log('Connected to websocket server.');
     });
@@ -375,7 +487,8 @@ class App extends React.Component {
           <Col flex="auto" style={{display: 'flex', flexDirection: 'column'}}>
             <div style={{height: 120, backgroundColor: 'white'}}>URDF viewer</div>
             <div style={{height: 8}}/>
-            <DetectionViewer/>
+            {/*<DetectionViewer/>*/}
+            <DetectionPanel/>
           </Col>
           <Col flex="200px" style={{display: 'flex', flexDirection: 'column'}}>
             <ControlPanel/>
