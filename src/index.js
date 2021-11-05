@@ -4,6 +4,12 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+// let script = document.createElement('script');
+// script.type = 'text/javascript';
+// script.async = true;
+// script.src = './ros-web-tools/roslib.js';
+// document.head.appendChild(script);
+
 ReactDOM.render(
   <React.StrictMode>
     <App />

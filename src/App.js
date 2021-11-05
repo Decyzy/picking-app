@@ -3,87 +3,10 @@ import './App.css';
 import { Row, Col, InputNumber, Card, Button, Space, Timeline } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
+// import * as ROSLIB from './ros-web-tools/src/RosLib'
+
 const zrender = require("zrender");
-const ROSLIB = require("roslib");
-
-
-// class DetectionViewer extends React.Component {
-//   constructor(props) {
-//     super(props);
-//     this.canvasRef = React.createRef();
-//     this.drawCanvas = this.drawCanvas.bind(this);
-//   }
-//
-//   drawCanvas(canvas) {
-//     let image = this.image;
-//     const w = canvas.clientWidth;
-//     const h = image.height / image.width * canvas.clientWidth;
-//     canvas.width = w;
-//     canvas.height = h;
-//     const ctx = canvas.getContext('2d');
-//     ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-//
-//     ctx.drawImage(image, 0, 0, w, h);
-//     let msg = this.msg;
-//     for (let i = 0; i < msg.pixel_pts_lt.length; ++i) {
-//       ctx.beginPath();
-//       ctx.moveTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
-//       ctx.lineTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_rb[i].y / 1080 * h);
-//       ctx.lineTo(msg.pixel_pts_rb[i].x / 1920 * w, msg.pixel_pts_rb[i].y / 1080 * h);
-//       ctx.lineTo(msg.pixel_pts_rb[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
-//       ctx.lineTo(msg.pixel_pts_lt[i].x / 1920 * w, msg.pixel_pts_lt[i].y / 1080 * h);
-//       ctx.strokeStyle = "#F5270B";
-//       ctx.lineWidth = 3;
-//       ctx.stroke();
-//     }
-//   }
-//
-//   componentDidMount() {
-//     let that = this;
-//     that.canvasRef.current.addEventListener("mousedown", (e) => {
-//       console.log(e);
-//     })
-//     window.addEventListener('resize', () => {
-//       const c = that.canvasRef.current;
-//       if (that.image && c) {
-//         that.drawCanvas(c);
-//       }
-//     })
-//
-//     this.listener = new ROSLIB.Topic({
-//       ros: ros,
-//       name: '/picking_detection_result',
-//       messageType: 'pickingv2/DetectionResult'
-//     });
-//     this.listener.subscribe(function (msg) {
-//       console.log('Received message on ' + that.listener.name);
-//       console.log(msg)
-//       const c = that.canvasRef.current;
-//       if (c) {
-//         that.image = new Image();
-//         that.msg = msg
-//         that.image.onload = function () {
-//           that.drawCanvas(c)
-//         };
-//         that.image.src = `data:image/${msg.image.format};base64,${msg.image.data}`;
-//       }
-//     });
-//   }
-//
-//   componentWillUnmount() {
-//     if (this.listener != null) {
-//       this.listener.unsubscribe();
-//     }
-//   }
-//
-//   render() {
-//     return (
-//       <div className="DetectionViewer">
-//         <canvas ref={this.canvasRef} style={{width: '100%'}}> Your browser cannot support canvas.</canvas>
-//       </div>
-//     );
-//   }
-// }
+const ROSLIB = require("./ros-web-tools/src/RosLib");
 
 class DetectionPanel extends React.Component {
   constructor(props) {
@@ -190,7 +113,7 @@ class DetectionPanel extends React.Component {
   render() {
     return (
       <div className="DetectionViewer" ref={this.pr}>
-        <div ref={this.r} />
+        <div ref={this.r}/>
         next
       </div>
     );
@@ -214,19 +137,19 @@ class ControlPanel extends React.Component {
   }
 
   componentDidMount() {
-    this.ac = new ROSLIB.ActionClient({
+    this.cmdService = new ROSLIB.Service({
       ros: ros,
-      serverName: '/picking_cmd',
-      actionName: 'pickingv2/PickingCmdAction'
+      name: '/picking/cmd',
+      serviceType: 'pickingv2/PickingCmd'
     });
     this.controlSrv = new ROSLIB.Service({
       ros: ros,
-      name: '/picking_control',
+      name: '/picking/control',
       serviceType: 'pickingv2/PickingControl'
     });
     this.carMoveSrv = new ROSLIB.Service({
       ros: ros,
-      name: '/picking_car_move',
+      name: '/picking/car_move',
       serviceType: 'pickingv2/CarMove'
     })
   }
@@ -237,25 +160,17 @@ class ControlPanel extends React.Component {
       loadingBtName: cmd_name,
       isTaskRunning: true
     })
+    let req = new ROSLIB.ServiceRequest({
+      cmd: cmd_name,
+    });
     let that = this;
-    const goal = new ROSLIB.Goal({
-      actionClient: this.ac,
-      goalMessage: {
-        name: cmd_name,
-      }
-    });
-    goal.on('feedback', function (feedback) {
-      console.log('Feedback: ' + feedback.name);
-    });
-
-    goal.on('result', function (result) {
-      console.log('Final Result: ');
-      console.log(result)
+    this.cmdService.callService(req, function (result) {
+      console.log(result);
       that.setState({
         loadingBtName: "",
+        isTaskRunning: false
       })
     });
-    goal.send();
   }
 
   onStopBtClicked() {
