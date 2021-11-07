@@ -3,10 +3,59 @@ import './App.css';
 import { Row, Col, InputNumber, Card, Button, Space, Timeline } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
-// import * as ROSLIB from './ros-web-tools/src/RosLib'
 
 const zrender = require("zrender");
-const ROSLIB = require("./ros-web-tools/src/RosLib");
+const ROSLIB = require("roslib");
+const ROS3D = require("ros3d");
+const imgRatio = 1080 / 1920;
+
+class Ros3dPanel extends React.Component {
+  constructor(props) {
+    super(props);
+    this.pr = React.createRef();
+
+    this.onResizeHandle = this.onResizeHandle.bind(this);
+  }
+
+  onResizeHandle() {
+    this.viewer.resize(this.pr.current.clientWidth, this.pr.current.clientHeight);
+  }
+
+  componentDidMount() {
+    this.viewer = new ROS3D.Viewer({
+      divID: 'urdf',
+      width: this.pr.current.clientWidth,
+      height: this.pr.current.clientHeight,
+      antialias: true,
+      background: "#303030"
+    });
+    this.viewer.addObject(new ROS3D.Grid());
+
+    let tfClient = new ROSLIB.TFClient({
+      ros: ros,
+      angularThres: 0.01,
+      transThres: 0.01,
+      rate: 10.0,
+      fixedFrame: "platform"
+    });
+
+    this.urdfClient = new ROS3D.UrdfClient({
+      ros: ros,
+      path: "http://10.161.237.102:8875/",
+      tfClient: tfClient,
+      rootObject: this.viewer.scene,
+    });
+    window.addEventListener('resize', this.onResizeHandle);
+  }
+
+  render() {
+    return (
+      <div className="Ros3dPanel" ref={this.pr}>
+        <div id="urdf"/>
+      </div>
+    );
+  }
+}
 
 class DetectionPanel extends React.Component {
   constructor(props) {
@@ -24,24 +73,10 @@ class DetectionPanel extends React.Component {
       width: 'auto',
       height: 'auto'
     });
-    let circle = new zrender.Circle({
-      shape: {
-        cx: 150,
-        cy: 50,
-        r: 40
-      },
-      style: {
-        fill: 'none',
-        stroke: '#F00'
-      }
-    });
-    circle.on("click", () => console.log("sds"))
-    this.zr.add(circle);
-
     let that = this;
     this.listener = new ROSLIB.Topic({
       ros: ros,
-      name: '/picking_detection_result',
+      name: '/picking/detection_result',
       messageType: 'pickingv2/DetectionResult'
     });
 
@@ -372,9 +407,10 @@ const ros = new ROSLIB.Ros()
 
 class App extends React.Component {
 
-  // constructor(props) {
-  //   super(props);
-  // }
+  constructor(props) {
+    super(props);
+    this.onRequestFullscreen = this.onRequestFullscreen.bind(this);
+  }
 
   componentDidMount() {
     ros.connect("ws://10.161.237.102:9090");
@@ -395,20 +431,54 @@ class App extends React.Component {
     ros.close();
   }
 
+  onRequestFullscreen() {
+    let element = document.documentElement;
+    if (element.requestFullscreen) {
+      element.requestFullscreen();
+    } else if (element.msRequestFullscreen) {
+      element.msRequestFullscreen();
+    } else if (element.mozRequestFullScreen) {
+      element.mozRequestFullScreen();
+    } else if (element.webkitRequestFullscreen) {
+      element.webkitRequestFullscreen();
+    }
+  }
+
+  onExitFullscreen() {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) { /* Safari */
+      document.webkitExitFullscreen();
+    } else if (document.msExitFullscreen) { /* IE11 */
+      document.msExitFullscreen();
+    }
+  }
+
   render() {
     return (
       <div className="App">
         <Row style={{height: '100%'}} gutter={8} wrap={false}>
           <Col flex="auto" style={{display: 'flex', flexDirection: 'column'}}>
-            <div style={{height: 120, backgroundColor: 'white'}}>URDF viewer</div>
+            <Ros3dPanel/>
             <div style={{height: 8}}/>
-            {/*<DetectionViewer/>*/}
             <DetectionPanel/>
           </Col>
-          <Col flex="200px" style={{display: 'flex', flexDirection: 'column'}}>
+          <Col flex="400px" style={{display: 'flex', flexDirection: 'column'}}>
+            <div>ddd</div>
+          </Col>
+          <Col flex="250px" style={{display: 'flex', flexDirection: 'column'}}>
             <ControlPanel/>
             <div style={{height: 8}}/>
             <TaskStatusPanel/>
+            {/*<div style={{height: 8}}/>*/}
+            {/*<Row>*/}
+            {/*  <Col>*/}
+            {/*    <Button onClick={this.onRequestFullscreen} type="primary">进入全屏</Button>*/}
+            {/*  </Col>*/}
+            {/*  <Col>*/}
+            {/*    <Button onClick={this.onExitFullscreen} type="primary">退出全屏</Button>*/}
+            {/*  </Col>*/}
+            {/*</Row>*/}
           </Col>
         </Row>
       </div>
