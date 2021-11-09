@@ -1,8 +1,9 @@
 import React, {} from 'react'
 import './App.css';
-import { Row, Col, InputNumber, Card, Button, Space, Timeline } from 'antd';
+import { Row, Col, InputNumber, Button, Card, Space, Timeline } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
-
+// import { Button, Card } from 'ui-neumorphism'
+// import 'ui-neumorphism/dist/index.css'
 
 const zrender = require("zrender");
 const ROSLIB = require("roslib");
@@ -41,7 +42,7 @@ class Ros3dPanel extends React.Component {
 
     this.urdfClient = new ROS3D.UrdfClient({
       ros: ros,
-      path: "http://10.161.237.102:8875/",
+      path: "http://192.168.0.133:8875/",
       tfClient: tfClient,
       rootObject: this.viewer.scene,
     });
@@ -413,7 +414,7 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    ros.connect("ws://10.161.237.102:9090");
+    ros.connect("ws://192.168.0.133:9090");
     ros.on('connection', function () {
       console.log('Connected to websocket server.');
     });
