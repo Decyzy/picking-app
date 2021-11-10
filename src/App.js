@@ -1,6 +1,6 @@
 import React, {} from 'react'
 import './App.css';
-import { Row, Col, InputNumber, Button, Card, Space, Timeline } from 'antd';
+import { Row, Col, InputNumber, Button, Card, Space, Timeline, Switch } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 // import { Button, Card } from 'ui-neumorphism'
 // import 'ui-neumorphism/dist/index.css'
@@ -8,6 +8,7 @@ import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 const zrender = require("zrender");
 const ROSLIB = require("roslib");
 const ROS3D = require("ros3d");
+// const MJPEGCANVAS = require("./streamViewer");
 const imgRatio = 1080 / 1920;
 
 class Ros3dPanel extends React.Component {
@@ -169,6 +170,7 @@ class ControlPanel extends React.Component {
     this.onStopBtClicked = this.onStopBtClicked.bind(this);
     this.onPauseBtClicked = this.onPauseBtClicked.bind(this);
     this.onCarMoveBtClicked = this.onCarMoveBtClicked.bind(this);
+    this.onOpenHandClicked = this.onOpenHandClicked.bind(this);
     this.carMoveDistance = 1.0;
   }
 
@@ -266,6 +268,21 @@ class ControlPanel extends React.Component {
     // this.ac.dispose();
   }
 
+  onOpenHandClicked(prefix, opened) {
+    console.log("onOpenHandClicked " + prefix);
+    console.log(opened);
+    let req = new ROSLIB.ServiceRequest({
+      cmd: prefix + (opened ? "open_hand" : "close_hand"),
+    });
+    let that = this;
+    this.cmdService.callService(req, function (result) {
+      console.log(result);
+      that.setState({
+        isStopBtLoading: false
+      })
+    });
+  }
+
   render() {
     return (
       <Card title="控制面板" style={{width: '100%'}} size="small">
@@ -325,6 +342,23 @@ class ControlPanel extends React.Component {
                       loading={this.state.isCarMoveBtLoadingName === "backward"}
                       disabled={this.state.isCarMoveBtLoadingName !== "" && this.state.isCarMoveBtLoadingName !== "backward"}
               />
+            </Col>
+          </Row>
+          <Row gutter={8} justify="space-between">
+            <Col span={8}>
+              气爪：
+            </Col>
+            <Col span={8}>
+              <Switch
+                checkedChildren="开"
+                unCheckedChildren="关"
+                onClick={(opened, e) => this.onOpenHandClicked("left_", opened)}/>
+            </Col>
+            <Col span={8}>
+              <Switch
+                checkedChildren="开"
+                unCheckedChildren="关"
+                onClick={(opened, e) => this.onOpenHandClicked("right_", opened)}/>
             </Col>
           </Row>
           {/*<Row>*/}
@@ -426,6 +460,14 @@ class App extends React.Component {
     ros.on('close', function () {
       console.log('Connection to websocket server closed.');
     });
+
+    // this.realTimeViewer = new MJPEGCANVAS.Viewer({
+    //   divID : 'mjpeg-viewer',
+    //   host : '192.168.0.133',
+    //   width : 64,
+    //   height : 48,
+    //   topic : '/kinect2/qhd/image_color'
+    // });
   }
 
   componentWillUnmount() {
@@ -464,13 +506,14 @@ class App extends React.Component {
             <div style={{height: 8}}/>
             <DetectionPanel/>
           </Col>
-          <Col flex="400px" style={{display: 'flex', flexDirection: 'column'}}>
-            <div>ddd</div>
-          </Col>
+          {/*<Col flex="400px" style={{display: 'flex', flexDirection: 'column'}}>*/}
+          {/*  <div>ddd</div>*/}
+          {/*</Col>*/}
           <Col flex="250px" style={{display: 'flex', flexDirection: 'column'}}>
             <ControlPanel/>
             <div style={{height: 8}}/>
             <TaskStatusPanel/>
+            {/*<div id="mjpeg-viewer"/>*/}
             {/*<div style={{height: 8}}/>*/}
             {/*<Row>*/}
             {/*  <Col>*/}
